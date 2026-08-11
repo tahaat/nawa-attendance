@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1F3864">
+<title>تسجيل الحضور — نوى</title>
+<style>
+:root{
+  --navy:#1F3864; --teal:#1F6F3D; --gold:#BF8F00; --blue:#2E5F8A; --red:#9B2828;
+  --ink:#16202e; --muted:#7b8794; --line:#d9dee6; --bg:#f4f6f9; --card:#fff;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;height:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,Arial,sans-serif;
+  background:var(--bg); color:var(--ink);
+  display:flex; justify-content:center;
+  padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+}
+.wrap{width:100%;max-width:520px;display:flex;flex-direction:column;height:100vh;height:100dvh}
+/* ===== الرأس ===== */
+.gate{
+  margin:10px 12px 8px; padding:13px 14px; background:var(--card);
+  border:2px solid var(--ink); border-radius:12px; text-align:center;
+  font-weight:800; font-size:17px; position:relative;
+}
+.gate .st{
+  position:absolute; inset-inline-start:12px; top:50%; transform:translateY(-50%);
+  width:11px;height:11px;border-radius:50%;background:var(--teal)
+}
+.gate .st.off{background:var(--gold)}
+.gate .cog{
+  position:absolute; inset-inline-end:8px; top:50%; transform:translateY(-50%);
+  border:0;background:transparent;font-size:19px;color:var(--muted);padding:6px;cursor:pointer
+}
+/* ===== أزرار الحركة 2×2 ===== */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:0 12px 10px}
+.mv{
+  padding:15px 8px;border-radius:11px;border:2px solid var(--ink);
+  background:var(--card);color:var(--ink);font-size:17px;font-weight:800;
+  cursor:pointer;transition:.12s;font-family:inherit
+}
+.mv[aria-pressed="true"]{color:#fff;border-color:transparent;box-shadow:0 3px 10px rgba(0,0,0,.22)}
+.mv[data-t="حضور"][aria-pressed="true"]{background:var(--teal)}
+.mv[data-t="خروج"][aria-pressed="true"]{background:var(--gold)}
+.mv[data-t="عودة"][aria-pressed="true"]{background:var(--blue)}
+.mv[data-t="انصراف"][aria-pressed="true"]{background:var(--red)}
+/* ===== نافذة المسح ===== */
+.scan{
+  position:relative;margin:0 12px;border:2px dashed #b6bec9;border-radius:14px;
+  background:#0d1218;overflow:hidden;flex:1 1 auto;min-height:190px
+}
+.scan video{width:100%;height:100%;object-fit:cover;display:block}
+.ph{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  color:#6b7684;font-size:30px;font-weight:800;letter-spacing:3px;background:#eef1f5
+}
+.cor{position:absolute;width:34px;height:34px;border:5px solid #12181f;pointer-events:none}
+.tl{top:12px;left:12px;border-right:0;border-bottom:0;border-radius:6px 0 0 0}
+.tr{top:12px;right:12px;border-left:0;border-bottom:0;border-radius:0 6px 0 0}
+.bl{bottom:12px;left:12px;border-right:0;border-top:0;border-radius:0 0 0 6px}
+.br{bottom:12px;right:12px;border-left:0;border-top:0;border-radius:0 0 6px 0}
+.scan.live .cor{border-color:#fff;opacity:.92}
+/* ===== بطاقة النتيجة ===== */
+.res{
+  margin:10px 12px;padding:14px;border-radius:12px;border:2px solid var(--line);
+  background:var(--card);text-align:center;min-height:78px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px
+}
+.res.ok{border-color:var(--teal);background:#eaf5ee}
+.res.bad{border-color:var(--red);background:#fdecec}
+.res .nm{font-size:20px;font-weight:800;color:var(--teal)}
+.res .cd{font-size:22px;font-weight:800;letter-spacing:1px;direction:ltr}
+.res.bad .nm,.res.bad .cd{color:var(--red)}
+.res .idle{color:var(--muted);font-size:15px;font-weight:600}
+.res img{width:74px;height:74px;border-radius:9px;object-fit:cover;border:3px solid var(--teal)}
+.res.bad img{border-color:var(--red)}
+.res .hint{font-size:12.5px;color:var(--gold);font-weight:700}
+/* ===== آخر الحركات ===== */
+.feed{
+  margin:0 12px;padding:9px 12px;border:2px dashed var(--line);border-radius:12px;
+  background:var(--card);max-height:118px;overflow:auto
+}
+.feed h4{margin:0 0 5px;font-size:12.5px;color:var(--muted);font-weight:700}
+.feed .row{display:flex;gap:7px;align-items:center;font-size:13.5px;padding:3px 0;border-bottom:1px solid #f0f2f5}
+.feed .row:last-child{border:0}
+.feed .row .t{color:var(--muted);direction:ltr;font-variant-numeric:tabular-nums}
+.feed .row.no{color:var(--red)}
+.feed .em{color:var(--muted);font-size:13px;padding:5px 0}
+/* ===== التذييل ===== */
+.foot{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:9px 16px 12px;color:var(--muted);font-size:13.5px;font-weight:700
+}
+.foot .pend{color:var(--gold)}
+.foot .pend.zero{color:var(--muted)}
+.clock{direction:ltr;font-variant-numeric:tabular-nums}
+/* ===== الإعدادات ===== */
+.setup{padding:16px;overflow:auto;height:100%}
+.setup h2{margin:6px 0 4px;font-size:21px;color:var(--navy)}
+.setup p.sub{margin:0 0 16px;color:var(--muted);font-size:13.5px;line-height:1.6}
+label{display:block;margin:11px 0 5px;font-weight:700;font-size:14px}
+input,select{
+  width:100%;padding:12px;border:2px solid var(--line);border-radius:10px;
+  font-size:15px;font-family:inherit;background:#fff
+}
+input[dir=ltr]{direction:ltr;text-align:left}
+.btn{
+  width:100%;padding:14px;margin-top:16px;border:0;border-radius:11px;
+  background:var(--navy);color:#fff;font-size:16px;font-weight:800;font-family:inherit;cursor:pointer
+}
+.btn.ghost{background:transparent;color:var(--navy);border:2px solid var(--navy);margin-top:9px}
+.btn.warn{background:var(--gold)}
+.note{
+  margin-top:14px;padding:11px;background:#fff8e6;border-inline-start:5px solid var(--gold);
+  border-radius:8px;font-size:12.5px;line-height:1.7;color:#5c4708
+}
+.hide{display:none!important}
+.toast{
+  position:fixed;bottom:22px;left:50%;transform:translateX(-50%);
+  background:#16202e;color:#fff;padding:11px 20px;border-radius:24px;font-size:14px;
+  font-weight:700;z-index:99;opacity:0;transition:.25s;pointer-events:none;max-width:88%
+}
+.toast.show{opacity:.96}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <!-- ============ الإعدادات ============ -->
+  <div id="setup" class="setup hide">
+    <h2>إعداد جهاز البوابة</h2>
+    <p class="sub">تُضبط هذه القيم مرة واحدة على كل جهاز، وتبقى محفوظة بعد إغلاق التطبيق.</p>
+    <label>اسم البوابة</label>
+    <select id="cfgCenter">
+      <option>المبنى الرئيسي</option>
+      <option>مكتبة الخضر</option>
+      <option>مركز الزيتونة</option>
+      <option>حدائق نوى - البيارة</option>
+    </select>
+    <label>معرّف الجهاز</label>
+    <input id="cfgDevice" dir="ltr" placeholder="DEV-01">
+    <label>رابط الخدمة (Web app URL)</label>
+    <input id="cfgUrl" dir="ltr" placeholder="https://script.google.com/macros/s/.../exec">
+    <label>رمز الحماية (Token)</label>
+    <input id="cfgToken" dir="ltr" placeholder="الرمز نفسه الموجود في السكربت">
+    <button class="btn" id="btnSave">حفظ وبدء التشغيل</button>
+    <button class="btn ghost" id="btnTest">اختبار الاتصال وتنزيل البطاقات</button>
+    <button class="btn ghost hide" id="btnBack">رجوع لشاشة المسح</button>
+    <div class="note">
+      رمز الحماية يمنع أي شخص خارجي من إرسال حركات وهمية إلى الجدول. اجعله طويلاً وعشوائياً،
+      ولا تكتبه في أي مكان يصل إليه الموظفون.
+    </div>
+    <div class="note" id="cacheInfo"></div>
+  </div>
+  <!-- ============ شاشة المسح ============ -->
+  <div id="main" class="wrap hide" style="height:100%">
+    <div class="gate">
+      <span class="st" id="dot"></span>
+      <span id="gateName">بوابة: —</span>
+      <button class="cog" id="btnCfg" aria-label="الإعدادات">⚙</button>
+    </div>
+    <div class="grid" id="grid">
+      <button class="mv" data-t="حضور"   aria-pressed="true">حضور</button>
+      <button class="mv" data-t="خروج"   aria-pressed="false">خروج</button>
+      <button class="mv" data-t="عودة"   aria-pressed="false">عودة</button>
+      <button class="mv" data-t="انصراف" aria-pressed="false">انصراف</button>
+    </div>
+    <div class="scan" id="scanBox">
+      <div class="ph" id="ph">QR</div>
+      <video id="vid" playsinline muted class="hide"></video>
+      <span class="cor tl"></span><span class="cor tr"></span>
+      <span class="cor bl"></span><span class="cor br"></span>
+    </div>
+    <div class="res" id="res"><span class="idle">وجّه الكاميرا نحو رمز البطاقة</span></div>
+    <div class="feed">
+      <h4>آخر الحركات ↓</h4>
+      <div id="feed"><div class="em">لا توجد حركات بعد</div></div>
+    </div>
+    <div class="foot">
+      <span>حركات اليوم: <b id="cnt">0</b></span>
+      <span class="pend zero" id="pend">لا شيء بانتظار الإرسال</span>
+      <span class="clock" id="clk">--:--</span>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script>(function(){
+"use strict";
+var $=function(s){return document.querySelector(s)};
+var K={cfg:"nawa_cfg",badges:"nawa_badges",pend:"nawa_pending",log:"nawa_log"};
+var cfg=null, badges=[], pending=[], log=[], move="حضور";
+var stream=null, scanning=false, lastCode="", lastAt=0, canvas=null, ctx=null;
+/* ---------- تخزين ---------- */
+function load(k,d){try{var v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
+function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+function toast(m,ms){var t=$("#toast");t.textContent=m;t.classList.add("show");
+  clearTimeout(t._h);t._h=setTimeout(function(){t.classList.remove("show")},ms||2200)}
+function pad(n){return(n<10?"0":"")+n}
+function dstr(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())}
+function tstr(d){return pad(d.getHours())+":"+pad(d.getMinutes())}
+/* ---------- الإعدادات ---------- */
+function openSetup(first){
+  $("#main").classList.add("hide"); $("#setup").classList.remove("hide");
+  $("#btnBack").classList.toggle("hide",!!first);
+  if(cfg){$("#cfgCenter").value=cfg.center;$("#cfgDevice").value=cfg.device;
+    $("#cfgUrl").value=cfg.url;$("#cfgToken").value=cfg.token}
+  $("#cacheInfo").textContent="البطاقات المخزّنة على الجهاز: "+badges.length+
+    (pending.length?"  |  حركات بانتظار الإرسال: "+pending.length:"");
+  stopCam();
+}
+function openMain(){
+  $("#setup").classList.add("hide"); $("#main").classList.remove("hide");
+  $("#gateName").textContent="بوابة: "+cfg.center;
+  render(); startCam();
+}
+$("#btnSave").onclick=function(){
+  var c={center:$("#cfgCenter").value,device:$("#cfgDevice").value.trim()||"DEV-01",
+         url:$("#cfgUrl").value.trim(),token:$("#cfgToken").value.trim()};
+  if(!c.url){toast("أدخل رابط الخدمة أولاً");return}
+  cfg=c; save(K.cfg,cfg); openMain();
+};
+$("#btnBack").onclick=function(){openMain()};
+$("#btnCfg").onclick=function(){openSetup(false)};
+$("#btnTest").onclick=function(){
+  var url=$("#cfgUrl").value.trim(), tk=$("#cfgToken").value.trim();
+  if(!url){toast("أدخل رابط الخدمة");return}
+  toast("جارٍ الاتصال…",4000);
+  fetch(url+"?action=badges&token="+encodeURIComponent(tk))
+   .then(function(r){return r.json()})
+   .then(function(j){
+      if(!j.ok){toast("رفض الخادم: "+(j.error||"غير معروف"),4000);return}
+      badges=j.badges||[]; save(K.badges,badges);
+      $("#cacheInfo").textContent="البطاقات المخزّنة على الجهاز: "+badges.length;
+      toast("نجح الاتصال — نُزّلت "+badges.length+" بطاقة",3000);
+   })
+   .catch(function(){toast("تعذر الاتصال — راجع الرابط والإنترنت",4000)});
+};
+/* ---------- أزرار الحركة ---------- */
+$("#grid").addEventListener("click",function(e){
+  var b=e.target.closest(".mv"); if(!b)return;
+  move=b.dataset.t;
+  [].forEach.call(document.querySelectorAll(".mv"),function(x){
+    x.setAttribute("aria-pressed", x===b?"true":"false")});
+});
+/* ---------- الكاميرا ---------- */
+function startCam(){
+  if(stream)return;
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    $("#ph").textContent="الكاميرا غير مدعومة"; return}
+  navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}}})
+  .then(function(s){
+    stream=s; var v=$("#vid");
+    v.srcObject=s; v.classList.remove("hide"); $("#ph").classList.add("hide");
+    $("#scanBox").classList.add("live");
+    v.play();
+    canvas=document.createElement("canvas");
+    ctx=canvas.getContext("2d",{willReadFrequently:true});
+    scanning=true; requestAnimationFrame(tick);
+  })
+  .catch(function(err){
+    $("#ph").classList.remove("hide");
+    $("#ph").style.fontSize="15px"; $("#ph").style.letterSpacing="0";
+    $("#ph").style.padding="0 18px"; $("#ph").style.textAlign="center";
+    $("#ph").textContent="تعذر تشغيل الكاميرا — تأكد من فتح الصفحة عبر https ومن منح إذن الكاميرا";
+  });
+}
+function stopCam(){
+  scanning=false;
+  if(stream){stream.getTracks().forEach(function(t){t.stop()});stream=null}
+  var v=$("#vid"); if(v){v.classList.add("hide");v.srcObject=null}
+  $("#ph").classList.remove("hide"); $("#scanBox").classList.remove("live");
+}
+function tick(){
+  if(!scanning)return;
+  var v=$("#vid");
+  if(v.readyState===v.HAVE_ENOUGH_DATA&&typeof jsQR==="function"){
+    var w=Math.min(v.videoWidth,640), sc=w/v.videoWidth, h=Math.round(v.videoHeight*sc);
+    if(w>0&&h>0){
+      canvas.width=w; canvas.height=h;
+      ctx.drawImage(v,0,0,w,h);
+      try{
+        var img=ctx.getImageData(0,0,w,h);
+        var code=jsQR(img.data,w,h,{inversionAttempts:"dontInvert"});
+        if(code&&code.data) onCode(code.data.trim());
+      }catch(e){}
+    }
+  }
+  requestAnimationFrame(tick);
+}
+/* ---------- تنبيهات ---------- */
+function beep(ok){
+  try{
+    var A=window.AudioContext||window.webkitAudioContext; if(!A)return;
+    var c=new A(), o=c.createOscillator(), g=c.createGain();
+    o.connect(g); g.connect(c.destination);
+    o.frequency.value=ok?880:220; o.type="sine";
+    g.gain.setValueAtTime(.16,c.currentTime);
+    g.gain.exponentialRampToValueAtTime(.001,c.currentTime+(ok?.16:.34));
+    o.start(); o.stop(c.currentTime+(ok?.17:.35));
+  }catch(e){}
+  if(navigator.vibrate)navigator.vibrate(ok?60:[70,60,70]);
+}
+/* ---------- معالجة المسح ---------- */
+function onCode(code){
+  var now=Date.now();
+  if(code===lastCode&&now-lastAt<2500)return;
+  lastCode=code; lastAt=now;
+  var b=null;
+  for(var i=0;i<badges.length;i++){if(badges[i].card===code){b=badges[i];break}}
+  if(!b){ reject(code,"بطاقة غير مسجّلة"); return }
+  if(String(b.status).trim()!=="سارية"){ reject(code,"بطاقة ملغاة — "+(b.name||""),b); return }
+  var d=new Date(), today=dstr(d);
+  for(var j=0;j<log.length;j++){
+    var L=log[j];
+    if(L.code===b.code&&L.type===move&&L.date===today){
+      if(move==="حضور"||move==="انصراف"){ reject(code,"سبق تسجيل "+move+" اليوم — "+b.name,b); return }
+      if(now-new Date(L.iso).getTime()<180000){ reject(code,"مسح مكرر خلال ٣ دقائق",b); return }
+    }
+  }
+  accept(b,d);
+}
+function reject(code,msg,b){
+  beep(false);
+  var r=$("#res"); r.className="res bad";
+  r.innerHTML="";
+  var n=document.createElement("div"); n.className="nm"; n.textContent=msg;
+  r.appendChild(n);
+  var c=document.createElement("div"); c.className="cd"; c.textContent=code;
+  r.appendChild(c);
+  addFeed({name:msg,time:tstr(new Date()),type:"",ok:false});
+}
+function accept(b,d){
+  beep(true);
+  var iso=d.toISOString();
+  var rec={
+    id:"MV-"+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+pad(d.getHours())+
+       pad(d.getMinutes())+pad(d.getSeconds())+"-"+b.code,
+    card:b.card, code:b.code, name:b.name, center:cfg.center,
+    type:move, date:dstr(d), time:tstr(d), iso:iso,
+    device:cfg.device, offline:!navigator.onLine, note:""
+  };
+  pending.push(rec); save(K.pend,pending);
+  log.unshift(rec); log=log.slice(0,300); save(K.log,log);
+  var r=$("#res"); r.className="res ok"; r.innerHTML="";
+  if(b.photo){var im=new Image();im.src=b.photo;im.alt="";r.appendChild(im)}
+  var n=document.createElement("div"); n.className="nm"; n.textContent=b.name; r.appendChild(n);
+  var c=document.createElement("div"); c.className="cd"; c.textContent=b.code; r.appendChild(c);
+  var h=document.createElement("div"); h.className="hint"; h.textContent="طابق الوجه قبل السماح بالدخول";
+  r.appendChild(h);
+  addFeed({name:b.name,time:rec.time,type:move,ok:true});
+  render(); sync();
+}
+function addFeed(x){
+  var f=$("#feed");
+  if(f.querySelector(".em"))f.innerHTML="";
+  var row=document.createElement("div");
+  row.className="row"+(x.ok?"":" no");
+  row.innerHTML='<span>'+(x.ok?"✓":"✕")+'</span>'+
+    '<span style="flex:1">'+esc(x.name)+(x.type?' — '+x.type:'')+'</span>'+
+    '<span class="t">'+x.time+'</span>';
+  f.insertBefore(row,f.firstChild);
+  while(f.children.length>6)f.removeChild(f.lastChild);
+}
+function esc(s){var d=document.createElement("div");d.textContent=s==null?"":s;return d.innerHTML}
+/* ---------- العرض ---------- */
+function render(){
+  var today=dstr(new Date()), n=0;
+  for(var i=0;i<log.length;i++)if(log[i].date===today)n++;
+  $("#cnt").textContent=n;
+  var p=$("#pend");
+  p.textContent = pending.length ? ("بانتظار الإرسال: "+pending.length) : "لا شيء بانتظار الإرسال";
+  p.className = "pend"+(pending.length?"":" zero");
+  $("#dot").className = "st"+(navigator.onLine?"":" off");
+  var d=new Date(); $("#clk").textContent=tstr(d);
+}
+/* ---------- المزامنة ---------- */
+var syncing=false;
+function sync(){
+  if(syncing||!pending.length||!navigator.onLine||!cfg||!cfg.url)return;
+  syncing=true;
+  var batch=pending.slice(0,40);
+  fetch(cfg.url,{
+    method:"POST",
+    headers:{"Content-Type":"text/plain;charset=utf-8"},
+    body:JSON.stringify({token:cfg.token,moves:batch})
+  })
+  .then(function(r){return r.json()})
+  .then(function(j){
+    syncing=false;
+    if(!j.ok){toast("رفض الخادم: "+(j.error||""),3000);return}
+    var ids={}; batch.forEach(function(m){ids[m.id]=1});
+    pending=pending.filter(function(m){return !ids[m.id]});
+    save(K.pend,pending); render();
+    if(pending.length)sync();
+  })
+  .catch(function(){syncing=false});
+}
+function refreshBadges(){
+  if(!navigator.onLine||!cfg||!cfg.url)return;
+  fetch(cfg.url+"?action=badges&token="+encodeURIComponent(cfg.token))
+  .then(function(r){return r.json()})
+  .then(function(j){if(j.ok&&j.badges){badges=j.badges;save(K.badges,badges)}})
+  .catch(function(){});
+}
+/* ---------- الإقلاع ---------- */
+cfg=load(K.cfg,null); badges=load(K.badges,[]);
+pending=load(K.pend,[]); log=load(K.log,[]);
+log.slice(0,5).reverse().forEach(function(r){
+  addFeed({name:r.name,time:r.time,type:r.type,ok:true})});
+if(cfg&&cfg.url)openMain(); else openSetup(true);
+setInterval(function(){render();sync()},20000);
+setInterval(refreshBadges,900000);
+window.addEventListener("online",function(){render();sync();refreshBadges()});
+window.addEventListener("offline",render);
+document.addEventListener("visibilitychange",function(){
+  if(document.hidden)stopCam();
+  else if(!$("#main").classList.contains("hide"))startCam();
+});
+refreshBadges();
+})();</script>
+</body>
+</html>
