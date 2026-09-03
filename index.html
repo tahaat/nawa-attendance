@@ -118,6 +118,13 @@ input[dir=ltr]{direction:ltr;text-align:left}
   margin-top:14px;padding:11px;background:#fff8e6;border-inline-start:5px solid var(--gold);
   border-radius:8px;font-size:12.5px;line-height:1.7;color:#5c4708
 }
+.warn{
+  margin:0 12px 8px;padding:10px 12px;border-radius:10px;
+  background:#fdecec;border:2px solid var(--red);color:#7a1c1c;
+  font-size:13.5px;font-weight:700;line-height:1.65
+}
+.warn.soft{background:#fff8e6;border-color:var(--gold);color:#5c4708}
+.foot .pend.bad{color:var(--red)}
 .hide{display:none!important}
 .toast{
   position:fixed;bottom:22px;left:50%;transform:translateX(-50%);
@@ -151,6 +158,7 @@ input[dir=ltr]{direction:ltr;text-align:left}
     <input id="cfgToken" dir="ltr" placeholder="الرمز نفسه الموجود في السكربت">
     <button class="btn" id="btnSave">حفظ وبدء التشغيل</button>
     <button class="btn ghost" id="btnTest">اختبار الاتصال وتنزيل البطاقات</button>
+    <button class="btn ghost" id="btnExport">تنزيل نسخة احتياطية من الحركات (CSV)</button>
     <button class="btn ghost hide" id="btnBack">رجوع لشاشة المسح</button>
     <div class="note">
       رمز الحماية يمنع أي شخص خارجي من إرسال حركات وهمية إلى الجدول. اجعله طويلاً وعشوائياً،
@@ -165,6 +173,7 @@ input[dir=ltr]{direction:ltr;text-align:left}
       <span id="gateName">بوابة: —</span>
       <button class="cog" id="btnCfg" aria-label="الإعدادات">⚙</button>
     </div>
+    <div class="warn hide" id="warn"></div>
     <div class="grid" id="grid">
       <button class="mv" data-t="حضور"   aria-pressed="true">حضور</button>
       <button class="mv" data-t="خروج"   aria-pressed="false">خروج</button>
@@ -194,7 +203,9 @@ input[dir=ltr]{direction:ltr;text-align:left}
 <script>(function(){
 "use strict";
 var $=function(s){return document.querySelector(s)};
-var K={cfg:"nawa_cfg",badges:"nawa_badges",pend:"nawa_pending",log:"nawa_log"};
+var K={cfg:"nawa_cfg",badges:"nawa_badges",pend:"nawa_pending",log:"nawa_log",
+       sok:"nawa_last_sync_ok",bok:"nawa_last_badges_ok"};
+var syncErr=0, lastSyncOk=0, lastBadgeOk=0, warnedAt=0;
 var cfg=null, badges=[], pending=[], log=[], move="حضور";
 var stream=null, scanning=false, lastCode="", lastAt=0, canvas=null, ctx=null;
 /* ---------- تخزين ---------- */
@@ -202,6 +213,15 @@ function load(k,d){try{var v=localStorage.getItem(k);return v?JSON.parse(v):d}ca
 function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 function toast(m,ms){var t=$("#toast");t.textContent=m;t.classList.add("show");
   clearTimeout(t._h);t._h=setTimeout(function(){t.classList.remove("show")},ms||2200)}
+/* رابط الخدمة: ينظّف أي نص ملصوق حوله، ويرفض ما ليس رابط نشر صالحاً.
+   هذا ما يمنع تكرار عطل «رابط الخدمة: https://…» الذي عطّل المزامنة بصمت. */
+function cleanUrl(s){
+  var m=String(s==null?"":s).match(/https:\/\/script\.google\.com\/\S*?\/exec/);
+  return m?m[0]:String(s==null?"":s).trim();
+}
+function validUrl(s){
+  return /^https:\/\/script\.google\.com\/macros\/s\/[^\/\s]+\/exec$/.test(String(s||""));
+}
 function pad(n){return(n<10?"0":"")+n}
 function dstr(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())}
 function tstr(d){return pad(d.getHours())+":"+pad(d.getMinutes())}
@@ -209,8 +229,13 @@ function tstr(d){return pad(d.getHours())+":"+pad(d.getMinutes())}
 function openSetup(first){
   $("#main").classList.add("hide"); $("#setup").classList.remove("hide");
   $("#btnBack").classList.toggle("hide",!!first);
-  if(cfg){$("#cfgCenter").value=cfg.center;$("#cfgDevice").value=cfg.device;
-    $("#cfgUrl").value=cfg.url;$("#cfgToken").value=cfg.token}
+  if(cfg){
+    var sel=$("#cfgCenter"), found=false;
+    for(var i=0;i<sel.options.length;i++) if(sel.options[i].value===cfg.center) found=true;
+    if(cfg.center&&!found){ var o=document.createElement("option");
+      o.value=cfg.center; o.textContent=cfg.center+" (محفوظ سابقاً)"; sel.appendChild(o); }
+    sel.value=cfg.center; $("#cfgDevice").value=cfg.device;
+    $("#cfgUrl").value=cfg.url; $("#cfgToken").value=cfg.token}
   $("#cacheInfo").textContent="البطاقات المخزّنة على الجهاز: "+badges.length+
     (pending.length?"  |  حركات بانتظار الإرسال: "+pending.length:"");
   stopCam();
@@ -221,22 +246,50 @@ function openMain(){
   render(); startCam();
 }
 $("#btnSave").onclick=function(){
+  var u=cleanUrl($("#cfgUrl").value);
+  if(!u){toast("أدخل رابط الخدمة أولاً");return}
+  if(!validUrl(u)){
+    toast("رابط غير صالح — يجب أن يكون بصيغة https://script.google.com/macros/s/.../exec",6000);
+    return}
+  $("#cfgUrl").value=u;
+  if(!$("#cfgCenter").value){toast("اختر اسم البوابة");return}
   var c={center:$("#cfgCenter").value,device:$("#cfgDevice").value.trim()||"DEV-01",
-         url:$("#cfgUrl").value.trim(),token:$("#cfgToken").value.trim()};
-  if(!c.url){toast("أدخل رابط الخدمة أولاً");return}
-  cfg=c; save(K.cfg,cfg); openMain();
+         url:u,token:$("#cfgToken").value.trim()};
+  cfg=c; save(K.cfg,cfg); openMain(); refreshBadges(); sync();
 };
 $("#btnBack").onclick=function(){openMain()};
+/* نسخة احتياطية: الحركات محفوظة في متصفح هذا الجهاز فقط،
+   ومسح بيانات التصفح يمحوها. هذا الزر ينزّلها كملف قبل أي عملية صيانة. */
+$("#btnExport").onclick=function(){
+  var all=pending.concat(log);
+  if(!all.length){toast("لا توجد حركات لتنزيلها");return}
+  var cols=["id","card","code","name","center","type","date","time","iso","device","offline"];
+  var q=function(v){v=(v==null?"":String(v)); return '"'+v.replace(/"/g,'""')+'"'};
+  var csv=cols.join(",")+"\r\n"+all.map(function(r){
+    return cols.map(function(c){return q(r[c])}).join(",")}).join("\r\n");
+  var blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"});
+  var a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="nawa-movements-"+dstr(new Date())+".csv";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  toast("نُزّلت "+all.length+" حركة ("+pending.length+" منها لم تُرسل بعد)",4000);
+};
+window.addEventListener("beforeunload",function(e){
+  if(pending.length){e.preventDefault(); e.returnValue=""}
+});
 $("#btnCfg").onclick=function(){openSetup(false)};
 $("#btnTest").onclick=function(){
-  var url=$("#cfgUrl").value.trim(), tk=$("#cfgToken").value.trim();
+  var url=cleanUrl($("#cfgUrl").value), tk=$("#cfgToken").value.trim();
   if(!url){toast("أدخل رابط الخدمة");return}
+  if(!validUrl(url)){toast("رابط غير صالح — راجع صيغة الرابط",6000);return}
+  $("#cfgUrl").value=url;
   toast("جارٍ الاتصال…",4000);
   fetch(url+"?action=badges&token="+encodeURIComponent(tk))
    .then(function(r){return r.json()})
    .then(function(j){
       if(!j.ok){toast("رفض الخادم: "+(j.error||"غير معروف"),4000);return}
       badges=j.badges||[]; save(K.badges,badges);
+      lastBadgeOk=Date.now(); save(K.bok,lastBadgeOk);
       $("#cacheInfo").textContent="البطاقات المخزّنة على الجهاز: "+badges.length;
       toast("نجح الاتصال — نُزّلت "+badges.length+" بطاقة",3000);
    })
@@ -376,9 +429,33 @@ function render(){
   $("#cnt").textContent=n;
   var p=$("#pend");
   p.textContent = pending.length ? ("بانتظار الإرسال: "+pending.length) : "لا شيء بانتظار الإرسال";
-  p.className = "pend"+(pending.length?"":" zero");
+  p.className = "pend"+(pending.length?(syncErr?" bad":""):" zero");
   $("#dot").className = "st"+(navigator.onLine?"":" off");
   var d=new Date(); $("#clk").textContent=tstr(d);
+  updateWarn();
+}
+/* شريط تحذير ظاهر بدل الفشل الصامت */
+function mins(t){return Math.round((Date.now()-t)/60000)}
+function updateWarn(){
+  var w=$("#warn"), msgs=[], hard=false;
+  if(!cfg||!validUrl(cfg.url||"")){
+    msgs.push("رابط الخدمة غير صالح — لن تصل أي حركة. افتح الإعدادات ⚙ وصحّحه.");hard=true}
+  if(pending.length){
+    var t = pending.length+" حركة لم تصل الجدول بعد";
+    if(syncErr){t+=" — آخر محاولة إرسال فشلت";hard=true}
+    t += lastSyncOk ? (" · آخر إرسال ناجح قبل "+mins(lastSyncOk)+" دقيقة")
+                    : " · لم ينجح أي إرسال على هذا الجهاز بعد";
+    if(pending.length>=20||(lastSyncOk&&mins(lastSyncOk)>60)) hard=true;
+    msgs.push(t);
+  }
+  if(!navigator.onLine) msgs.push("لا يوجد اتصال بالإنترنت — الحركات تُحفظ محلياً وتُرسل عند عودة الشبكة.");
+  if(lastBadgeOk && Date.now()-lastBadgeOk>86400000)
+    msgs.push("قائمة البطاقات لم تُحدَّث منذ أكثر من ٢٤ ساعة — قد تُرفض بطاقات موظفين جدد.");
+  if(!badges.length) {msgs.push("لا توجد بطاقات مخزّنة على هذا الجهاز — كل مسح سيُرفض.");hard=true}
+  if(msgs.length){
+    w.className="warn"+(hard?"":" soft");
+    w.innerHTML="⚠ "+msgs.join("<br>⚠ ");
+  } else w.className="warn hide";
 }
 /* ---------- المزامنة ---------- */
 var syncing=false;
@@ -394,28 +471,48 @@ function sync(){
   .then(function(r){return r.json()})
   .then(function(j){
     syncing=false;
-    if(!j.ok){toast("رفض الخادم: "+(j.error||""),3000);return}
+    if(!j.ok){syncErr++; toast("رفض الخادم: "+(j.error||"سبب غير معروف"),5000); render(); return}
+    syncErr=0; lastSyncOk=Date.now(); save(K.sok,lastSyncOk);
     var ids={}; batch.forEach(function(m){ids[m.id]=1});
     pending=pending.filter(function(m){return !ids[m.id]});
     save(K.pend,pending); render();
     if(pending.length)sync();
   })
-  .catch(function(){syncing=false});
+  .catch(function(){
+    syncing=false; syncErr++;
+    if(Date.now()-warnedAt>120000){
+      warnedAt=Date.now();
+      toast("تعذّر إرسال الحركات — "+pending.length+" حركة معلّقة على الجهاز",5000);
+    }
+    render();
+  });
 }
 function refreshBadges(){
   if(!navigator.onLine||!cfg||!cfg.url)return;
   fetch(cfg.url+"?action=badges&token="+encodeURIComponent(cfg.token))
   .then(function(r){return r.json()})
-  .then(function(j){if(j.ok&&j.badges){badges=j.badges;save(K.badges,badges)}})
-  .catch(function(){});
+  .then(function(j){
+    if(j.ok&&j.badges){badges=j.badges;save(K.badges,badges);
+      lastBadgeOk=Date.now(); save(K.bok,lastBadgeOk);}
+    else if(!j.ok){toast("تعذّر تحديث البطاقات: "+(j.error||""),4000)}
+    render();
+  })
+  .catch(function(){render()});
 }
 /* ---------- الإقلاع ---------- */
 cfg=load(K.cfg,null); badges=load(K.badges,[]);
 pending=load(K.pend,[]); log=load(K.log,[]);
+lastSyncOk=load(K.sok,0)||0; lastBadgeOk=load(K.bok,0)||0;
+/* إصلاح ذاتي: إن كان الرابط المحفوظ ملتصقاً بنص (مثل «رابط الخدمة: …») نظّفه */
+if(cfg&&cfg.url){
+  var _u=cleanUrl(cfg.url);
+  if(_u!==cfg.url&&validUrl(_u)){cfg.url=_u; save(K.cfg,cfg);}
+}
 log.slice(0,5).reverse().forEach(function(r){
   addFeed({name:r.name,time:r.time,type:r.type,ok:true})});
 if(cfg&&cfg.url)openMain(); else openSetup(true);
 setInterval(function(){render();sync()},20000);
+setInterval(updateWarn,60000);
 setInterval(refreshBadges,900000);
 window.addEventListener("online",function(){render();sync();refreshBadges()});
 window.addEventListener("offline",render);
@@ -427,3 +524,4 @@ refreshBadges();
 })();</script>
 </body>
 </html>
+ 
