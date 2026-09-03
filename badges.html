@@ -193,21 +193,22 @@ var LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAwwAAAKxBAMAAAAMcjZXAAAA
    المفتاح = القيمة كما هي مخزّنة في الشيت (بأي لغة)، والقيمة = [بالعربية, بالإنجليزية].
    أضف أي مركز جديد هنا؛ وأي مركز غير مذكور تنبّهك إليه لوحة الفحص. */
 var CENTERS={
-  "administration and training center":["مركز الإدارة والتدريب","Administration and Training Center"],
   "management and training center":["مركز الإدارة والتدريب","Management and Training Center"],
-  "administration & training center":["مركز الإدارة والتدريب","Administration & Training Center"],
-  "مركز الإدارة والتدريب":["مركز الإدارة والتدريب","Administration & Training Center"],
+  "administration and training center":["مركز الإدارة والتدريب","Management and Training Center"],
+  "al-khader children's center":["مركز الخضر للأطفال","Al-Khader Children's Center"],
+  "al-khader children center":["مركز الخضر للأطفال","Al-Khader Children's Center"],
   "al-zaytouna center":["مركز الزيتونة","Al-Zaytouna Center"],
-  "al zaytouna center":["مركز الزيتونة","Al-Zaytouna Center"],
-  "مركز الزيتونة":["مركز الزيتونة","Al-Zaytouna Center"],
-  "al-khader children center":["مركز الخضر للأطفال","Al-Khader Children Center"],
-  "مركز الخضر للأطفال":["مركز الخضر للأطفال","Al-Khader Children Center"],
-  "hekayat kindergarten":["روضة الحكايات","Hekayat Kindergarten"],
-  "روضة الحكايات":["روضة الحكايات","Hekayat Kindergarten"],
-  "nawa incubator":["حاضنة النوى","Nawa Incubator"],
-  "حاضنة النوى":["حاضنة النوى","Nawa Incubator"],
+  "alhikayat kindergarten":["روضة الحكايات","Alhikayat Kindergarten"],
+  "hekayat kindergarten":["روضة الحكايات","Alhikayat Kindergarten"],
   "external educational point":["نقطة تعليمية خارجي","External Educational Point"],
-  "نقطة تعليمية خارجي":["نقطة تعليمية خارجي","External Educational Point"]
+  "nawa hub":["حاضنة النوى","Nawa Hub"],
+  "nawa incubator":["حاضنة النوى","Nawa Hub"],
+  "مركز الإدارة والتدريب":["مركز الإدارة والتدريب","Management and Training Center"],
+  "مركز الخضر للأطفال":["مركز الخضر للأطفال","Al-Khader Children's Center"],
+  "مركز الزيتونة":["مركز الزيتونة","Al-Zaytouna Center"],
+  "روضة الحكايات":["روضة الحكايات","Alhikayat Kindergarten"],
+  "نقطة تعليمية خارجي":["نقطة تعليمية خارجي","External Educational Point"],
+  "حاضنة النوى":["حاضنة النوى","Nawa Hub"]
 };
 var ACTIVE=["سارية","valid","active","نشط"];
  
@@ -222,6 +223,13 @@ function hasArabic(s){return /[\u0600-\u06FF]/.test(String(s||""))}
 function isActive(s){return ACTIVE.indexOf(norm(s))>=0}
 function empNo(r){var m=String(r.code||'').match(/\d+/);
   return m?String(parseInt(m[0],10)):String(r.code||'')}
+function cleanUrl(s){
+  var m=String(s==null?"":s).match(/https:\/\/script\.google\.com\/\S*?\/exec/);
+  return m?m[0]:String(s==null?"":s).trim();
+}
+function validUrl(s){
+  return /^https:\/\/script\.google\.com\/macros\/s\/[^\/\s]+\/exec$/.test(String(s||""));
+}
 function setStatus(m,e){var el=$("#status");el.textContent=m||"";el.className="status"+(e?" err":"")}
  
 /* ===== تطبيع صف الموظف ===== */
@@ -338,6 +346,9 @@ function apply(list,fromCache){
  
 function sync(){
   if(!cfg||!cfg.url){openCfg();return}
+  if(!validUrl(cfg.url)){
+    setStatus("رابط الخدمة المحفوظ غير صالح — اضغط «إعدادات» وصحّحه",true);
+    openCfg(); return}
   setStatus("جارٍ الاتصال بالقاعدة…");
   fetch(cfg.url+"?action=badges&token="+encodeURIComponent(cfg.token||""))
    .then(function(r){return r.json()})
@@ -361,8 +372,12 @@ function openCfg(){
 }
  
 $("#btnSave").onclick=function(){
-  var u=$("#cfgUrl").value.trim();
+  var u=cleanUrl($("#cfgUrl").value);
   if(!u){alert("أدخل رابط الخدمة أولاً");return}
+  if(!validUrl(u)){
+    alert("رابط غير صالح.\nيجب أن يكون بصيغة:\nhttps://script.google.com/macros/s/.../exec");
+    return}
+  $("#cfgUrl").value=u;
   cfg={url:u,token:$("#cfgToken").value.trim()};
   save(K.cfg,cfg); $("#modal").classList.add("hide"); sync();
 };
@@ -408,7 +423,11 @@ printed=load(K.printed,{});
 cfg=load(K.cfg,null);
 if(!cfg||!cfg.url){
   var g=load(K.gate,null);
-  if(g&&g.url){cfg={url:g.url,token:g.token||""};save(K.cfg,cfg);}
+  if(g&&g.url){cfg={url:cleanUrl(g.url),token:g.token||""};save(K.cfg,cfg);}
+}
+if(cfg&&cfg.url){
+  var _u=cleanUrl(cfg.url);
+  if(_u!==cfg.url&&validUrl(_u)){cfg.url=_u;save(K.cfg,cfg);}
 }
 var cached=load(K.cache,null);
 if(cached&&cached.badges) apply(cached.badges,true);
@@ -419,4 +438,5 @@ else{ setStatus("لم يُضبط رابط الخدمة — اضغط «إعداد
 </script>
 </body>
 </html>
+ 
  
