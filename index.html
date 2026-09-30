@@ -59,7 +59,6 @@ body{
 .strip{height:11px;margin:8px 12px;background:var(--band) repeat-x;background-size:22px 11px;opacity:.9}
 /* ===== أزرار الحركة 2×2 ===== */
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:0 12px 10px}
-.grid.locked .mv{opacity:.45;pointer-events:none}
 .mv{
   padding:15px 8px;border-radius:12px;border:2px solid var(--line);
   background:var(--card);color:var(--ink);font-size:17px;font-weight:800;
@@ -121,21 +120,6 @@ body{
 .res img{width:74px;height:74px;border-radius:9px;object-fit:cover;border:3px solid var(--olive)}
 .res.bad img{border-color:var(--red)}
 .res .hint{font-size:12.5px;color:#8a6500;font-weight:700}
-/* بطاقة انتظار التأكيد — يجب أن يلمسها الحارس فعلياً، لا تُقبل تلقائياً */
-@keyframes gateGlow{
-  0%{box-shadow:0 3px 10px rgba(46,21,18,.08),0 0 0 0 rgba(230,169,1,.45)}
-  70%{box-shadow:0 3px 10px rgba(46,21,18,.08),0 0 0 13px rgba(230,169,1,0)}
-  100%{box-shadow:0 3px 10px rgba(46,21,18,.08),0 0 0 0 rgba(230,169,1,0)}
-}
-.res.confirm{border-color:var(--gold);animation:gateGlow 1.5s ease-out infinite}
-.res.confirm img{border-color:var(--gold)}
-.res .confirmBtns{display:flex;gap:8px;width:100%;margin-top:9px}
-.res .cbtn{
-  flex:1;padding:14px 6px;border-radius:12px;font-size:15.5px;font-weight:800;
-  font-family:inherit;cursor:pointer;line-height:1.25
-}
-.res .cbtn.ok{border:0;background:var(--olive);color:#fff}
-.res .cbtn.no{background:transparent;color:var(--red);border:2px solid var(--red)}
 /* ===== آخر الحركات ===== */
 .feed{
   margin:0 12px;padding:10px 13px;border:2px solid var(--line);border-radius:12px;
@@ -231,7 +215,6 @@ input[dir=ltr]{direction:ltr;text-align:left}
   .res .cd{font-size:25px}
   .res img{width:84px;height:84px}
   .res .hint{font-size:13.5px}
-  .res .cbtn{padding:15px 6px;font-size:16.5px}
   .feed h4{font-size:16px;margin-bottom:8px}
   .feed .row{font-size:18px;padding:7px 0;gap:10px}
   .feed .row .t{font-size:16px}
@@ -358,7 +341,6 @@ var K={cfg:"nawa_cfg",badges:"nawa_badges",pend:"nawa_pending",log:"nawa_log",
 var syncErr=0, lastSyncOk=0, lastBadgeOk=0, warnedAt=0;
 var cfg=null, badges=[], pending=[], log=[], move="حضور";
 var stream=null, scanning=false, lastCode="", lastAt=0, canvas=null, ctx=null;
-var pendingAccept=null, confirmTimer=null;
 /* تسمية العرض فقط: تظهر «مغادرة» للمستخدم بينما تبقى القيمة المسجّلة في الجدول «خروج»
    حتى لا تتأثر السجلات القديمة ولا معادلات التايم شيت. */
 var LBL={"خروج":"مغادرة"};
@@ -523,7 +505,6 @@ function beep(ok){
 }
 /* ---------- معالجة المسح ---------- */
 function onCode(code){
-  if(pendingAccept)return; /* بطاقة بانتظار تأكيد الحارس — تجاهل أي مسح جديد حتى يُبتّ فيها */
   var now=Date.now();
   if(code===lastCode&&now-lastAt<2500)return;
   lastCode=code; lastAt=now;
@@ -539,7 +520,7 @@ function onCode(code){
       if(now-new Date(L.iso).getTime()<180000){ reject(code,"مسح مكرر خلال ٣ دقائق",b); return }
     }
   }
-  askConfirm(b,d);
+  accept(b,d);
 }
 function reject(code,msg,b){
   beep(false);
@@ -551,48 +532,8 @@ function reject(code,msg,b){
   r.appendChild(c);
   addFeed({name:msg,time:tstr(new Date()),type:"",ok:false});
 }
-/* بطاقة سارية وغير مكررة — لا تُسجَّل الحركة تلقائياً. يجب أن يطابق الحارس
-   الوجه بالصورة ثم يضغط تأكيداً صريحاً؛ هذا أهم ضابط في النظام كله. */
-function askConfirm(b,d){
-  pendingAccept={b:b,d:d};
-  $("#grid").classList.add("locked");
-  beep(true);
-  var r=$("#res"); r.className="res ok confirm"; r.innerHTML="";
-  if(b.photo){var im=new Image();im.src=b.photo;im.alt="";r.appendChild(im)}
-  var n=document.createElement("div"); n.className="nm"; n.textContent=b.name; r.appendChild(n);
-  var c=document.createElement("div"); c.className="cd"; c.textContent=b.code; r.appendChild(c);
-  var h=document.createElement("div"); h.className="hint"; h.textContent="طابق الوجه بالصورة، ثم أكّد الدخول";
-  r.appendChild(h);
-  var box=document.createElement("div"); box.className="confirmBtns";
-  var okBtn=document.createElement("button"); okBtn.type="button"; okBtn.className="cbtn ok";
-  okBtn.textContent="✓ تطابق — تسجيل "+lbl(move);
-  var noBtn=document.createElement("button"); noBtn.type="button"; noBtn.className="cbtn no";
-  noBtn.textContent="✕ إلغاء";
-  box.appendChild(okBtn); box.appendChild(noBtn); r.appendChild(box);
-  okBtn.onclick=function(){confirmAccept()};
-  noBtn.onclick=function(){cancelConfirm()};
-  clearTimeout(confirmTimer);
-  confirmTimer=setTimeout(function(){
-    if(pendingAccept){cancelConfirm();toast("لم يُؤكَّد خلال الوقت المسموح — امسح البطاقة مجدداً",4000);}
-  },15000);
-}
-function confirmAccept(){
-  if(!pendingAccept)return;
-  clearTimeout(confirmTimer);
-  var b=pendingAccept.b, d=pendingAccept.d;
-  pendingAccept=null; $("#grid").classList.remove("locked");
-  if(navigator.vibrate)navigator.vibrate(25);
-  accept(b,d);
-}
-function cancelConfirm(){
-  if(!pendingAccept)return;
-  clearTimeout(confirmTimer);
-  pendingAccept=null; $("#grid").classList.remove("locked");
-  beep(false);
-  var r=$("#res"); r.className="res";
-  r.innerHTML='<span class="idle">أُلغي — وجّه الكاميرا نحو رمز البطاقة</span>';
-}
 function accept(b,d){
+  beep(true);
   var iso=d.toISOString();
   var rec={
     id:"MV-"+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+pad(d.getHours())+
@@ -607,7 +548,7 @@ function accept(b,d){
   if(b.photo){var im=new Image();im.src=b.photo;im.alt="";r.appendChild(im)}
   var n=document.createElement("div"); n.className="nm"; n.textContent=b.name; r.appendChild(n);
   var c=document.createElement("div"); c.className="cd"; c.textContent=b.code; r.appendChild(c);
-  var h=document.createElement("div"); h.className="hint"; h.textContent="✓ تم تسجيل "+lbl(move);
+  var h=document.createElement("div"); h.className="hint"; h.textContent="طابق الوجه قبل السماح بالدخول";
   r.appendChild(h);
   addFeed({name:b.name,time:rec.time,type:move,ok:true});
   render(); sync();
